@@ -1,0 +1,1440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>TerraRush — World Prediction Market</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;700;800&display=swap" rel="stylesheet"/>
+
+<!-- wagmi + viem + WalletConnect via CDN (ESM shim) -->
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #04040f;
+    --surface:  #090920;
+    --border:   rgba(80,80,220,0.22);
+    --accent:   #5555ee;
+    --accent2:  #00ffaa;
+    --under:    #3399ff;
+    --over:     #ff7733;
+    --warn:     #ffcc00;
+    --text:     #d8d8f8;
+    --muted:    #5a5a8a;
+    --font-mono: 'Space Mono', monospace;
+    --font-sans: 'Syne', sans-serif;
+  }
+
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-mono); }
+
+  /* ── Layout ── */
+  #app { display: flex; flex-direction: column; min-height: 100vh; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px;
+    background: rgba(9,9,32,0.9);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(20px);
+    position: sticky; top: 0; z-index: 100;
+  }
+
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-icon { font-size: 26px; }
+  .logo-title { font-family: var(--font-sans); font-size: 20px; font-weight: 800; color: #fff; letter-spacing: 1px; }
+  .logo-sub { font-size: 9px; color: var(--accent); letter-spacing: 3px; margin-top: 1px; }
+
+  .header-stats { display: flex; gap: 28px; }
+  .stat-item { text-align: center; }
+  .stat-label { font-size: 9px; color: var(--muted); letter-spacing: 2px; }
+  .stat-value { font-size: 15px; color: var(--accent2); font-weight: 700; margin-top: 2px; }
+
+  /* ── Wallet ── */
+  .wallet-section { display: flex; align-items: center; gap: 10px; }
+
+  .btn {
+    padding: 9px 18px; border-radius: 8px; cursor: pointer;
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.5px;
+    font-weight: 700; border: none; transition: all 0.2s; text-transform: uppercase;
+  }
+  .btn-primary { background: linear-gradient(135deg, #3333bb, #5555ee); color: #fff; }
+  .btn-primary:hover { background: linear-gradient(135deg, #4444cc, #7777ff); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+  .btn-outline:hover { border-color: var(--accent); color: var(--text); }
+  .btn-success { background: linear-gradient(135deg, #007744, #00ffaa); color: #000; }
+  .btn-danger  { background: linear-gradient(135deg, #881111, #ff4444); color: #fff; }
+  .btn-warn    { background: linear-gradient(135deg, #886600, #ffcc00); color: #000; }
+  .btn-sm { padding: 6px 12px; font-size: 10px; }
+  .btn-full { width: 100%; }
+
+  .wallet-addr {
+    padding: 8px 14px; border-radius: 8px;
+    background: rgba(80,80,220,0.12); border: 1px solid var(--border);
+    font-size: 11px; color: var(--accent2); cursor: pointer;
+  }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 4px; padding: 20px 28px 0; }
+  .tab {
+    padding: 9px 20px; border-radius: 8px 8px 0 0; cursor: pointer;
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 2px;
+    border: 1px solid transparent; border-bottom: none; transition: all 0.2s;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .tab.active { border-color: var(--border); background: var(--surface); color: var(--text); }
+  .tab:not(.active):hover { color: var(--text); }
+
+  main {
+    flex: 1; padding: 0 28px 40px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: rgba(255,255,255,0.025);
+    border: 1px solid var(--border);
+    border-radius: 14px; padding: 22px;
+  }
+  .card-label { font-size: 9px; color: var(--accent); letter-spacing: 3px; margin-bottom: 10px; text-transform: uppercase; }
+  .card-title { font-family: var(--font-sans); font-size: 18px; font-weight: 700; color: #fff; }
+
+  /* ── Market page ── */
+  .market-grid { display: grid; grid-template-columns: 1fr 320px; gap: 20px; padding-top: 20px; }
+
+  /* ── Round card ── */
+  .round-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+  .round-timer {
+    font-family: var(--font-sans); font-size: 40px; font-weight: 800;
+    font-variant-numeric: tabular-nums; letter-spacing: -1px;
+    transition: color 0.3s;
+  }
+  .timer-red { color: #ff4444; }
+  .timer-green { color: var(--accent2); }
+  .timer-resolved { font-size: 26px; }
+
+  .pool-bars { margin: 14px 0 6px; }
+  .pool-labels { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 6px; }
+  .pool-bar { height: 10px; border-radius: 5px; overflow: hidden; display: flex; background: #111; }
+  .pool-under { background: linear-gradient(90deg, #1155aa, #3399ff); transition: width 0.5s; }
+  .pool-over  { flex: 1; background: linear-gradient(90deg, #aa4411, #ff7733); }
+  .pool-meta { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+  /* ── Map ── */
+  .map-wrap {
+    background: rgba(255,255,255,0.015);
+    border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px;
+    margin-top: 18px;
+  }
+  .map-label { font-size: 9px; color: var(--accent); letter-spacing: 3px; margin-bottom: 12px; }
+
+  svg.world { width: 100%; height: auto; border-radius: 8px; }
+  .country-path {
+    cursor: pointer;
+    transition: fill 0.2s, stroke 0.2s;
+  }
+  .country-path:hover { opacity: 0.85; }
+
+  .map-legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--muted); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+  /* ── Right panel ── */
+  .right-panel { display: flex; flex-direction: column; gap: 16px; }
+
+  /* ── Bet panel ── */
+  .bet-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .bet-side {
+    padding: 14px 10px; border-radius: 10px; cursor: pointer; text-align: center;
+    border: 2px solid transparent; transition: all 0.2s; font-family: var(--font-mono);
+    font-size: 13px; font-weight: 700;
+  }
+  .bet-side-under { color: var(--under); border-color: rgba(51,153,255,0.2); background: rgba(51,153,255,0.05); }
+  .bet-side-under.selected { border-color: var(--under); background: rgba(51,153,255,0.18); }
+  .bet-side-over  { color: var(--over);  border-color: rgba(255,119,51,0.2);  background: rgba(255,119,51,0.05); }
+  .bet-side-over.selected  { border-color: var(--over);  background: rgba(255,119,51,0.18); }
+  .bet-side-sub { font-size: 10px; margin-top: 4px; opacity: 0.65; font-weight: 400; }
+
+  input.bet-input {
+    width: 100%; padding: 12px 14px; border-radius: 8px; margin-bottom: 10px;
+    background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+    color: #fff; font-family: var(--font-mono); font-size: 14px; outline: none;
+  }
+  input.bet-input:focus { border-color: var(--accent); }
+
+  .payout-preview {
+    padding: 12px 14px; border-radius: 8px; margin-top: 10px;
+    background: rgba(0,255,170,0.04); border: 1px solid rgba(0,255,170,0.15);
+  }
+  .payout-amount { font-size: 20px; color: var(--accent2); font-weight: 700; }
+  .payout-note   { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+  /* ── Socio detail ── */
+  .socio-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0; }
+  .socio-field { padding: 10px 12px; background: rgba(255,255,255,0.03); border-radius: 8px; }
+  .socio-field-label { font-size: 9px; color: var(--muted); margin-bottom: 3px; letter-spacing: 1px; }
+  .socio-field-value { font-size: 13px; font-weight: 700; }
+
+  .tax-bar-wrap { margin: 10px 0; }
+  .tax-bar { height: 6px; border-radius: 3px; background: #111; overflow: hidden; }
+  .tax-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #00ff88, #ffcc00); transition: width 0.5s; }
+
+  /* ── Socios page ── */
+  .socios-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; padding-top: 20px; }
+  .socio-card {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .socio-card:hover { border-color: rgba(80,80,220,0.5); transform: translateY(-2px); }
+  .socio-card.owned { border-color: rgba(0,255,170,0.3); background: rgba(0,255,170,0.04); }
+  .socio-card.active-round { border-color: rgba(255,204,0,0.4); background: rgba(255,204,0,0.04); }
+
+  /* ── Leaderboard ── */
+  .lb-row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 20px; border-radius: 12px; margin-bottom: 10px;
+    background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+    transition: all 0.2s;
+  }
+  .lb-row.me { border-color: rgba(0,255,170,0.3); background: rgba(0,255,170,0.04); }
+  .lb-rank {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 15px; flex-shrink: 0;
+  }
+
+  /* ── Notifications ── */
+  #notifs { position: fixed; top: 14px; right: 14px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+  .notif {
+    padding: 10px 18px; border-radius: 8px; font-size: 12px;
+    backdrop-filter: blur(12px); animation: slideIn 0.3s ease;
+    max-width: 320px;
+  }
+  .notif-success { background: rgba(0,255,136,0.12); border: 1px solid #00ff88; color: #00ff88; }
+  .notif-error   { background: rgba(255,68,68,0.12); border: 1px solid #ff4444; color: #ff8888; }
+  .notif-info    { background: rgba(80,80,220,0.15); border: 1px solid #5555ee; color: #aaaaff; }
+
+  /* ── Modals ── */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,0.82); backdrop-filter: blur(12px);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal {
+    background: #0d0d28; border: 1px solid rgba(80,80,220,0.4);
+    border-radius: 20px; padding: 32px; width: 420px; max-width: 95vw;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal-title { font-family: var(--font-sans); font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .modal-subtitle { font-size: 12px; color: var(--muted); margin-bottom: 22px; line-height: 1.7; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+
+  input.modal-input {
+    width: 100%; padding: 13px 14px; border-radius: 9px; margin-bottom: 10px;
+    background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+    color: #fff; font-family: var(--font-mono); font-size: 14px; outline: none;
+  }
+  input.modal-input:focus { border-color: var(--accent); }
+
+  /* ── AI Oracle card ── */
+  .oracle-card { background: rgba(0,255,170,0.03); border-color: rgba(0,255,170,0.15); }
+  .oracle-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 11px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .oracle-row:last-child { border: none; }
+
+  /* ── Withdraw banner ── */
+  .withdraw-banner {
+    margin: 16px 0 0;
+    padding: 14px 18px;
+    border-radius: 10px;
+    background: rgba(255,204,0,0.07);
+    border: 1px solid rgba(255,204,0,0.3);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+
+  /* ── Wallet picker modal ── */
+  .wallet-list { display: flex; flex-direction: column; gap: 10px; }
+  .wallet-option {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 18px; border-radius: 10px; cursor: pointer;
+    background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+    transition: all 0.2s; font-size: 14px; color: var(--text);
+  }
+  .wallet-option:hover { border-color: var(--accent); background: rgba(80,80,220,0.1); }
+  .wallet-icon { font-size: 24px; }
+
+  /* ── Misc ── */
+  .divider { height: 1px; background: var(--border); margin: 14px 0; }
+  .flex-between { display: flex; justify-content: space-between; align-items: center; }
+  .green { color: var(--accent2); }
+  .blue  { color: var(--under); }
+  .orange { color: var(--over); }
+  .yellow { color: var(--warn); }
+  .muted { color: var(--muted); }
+  .white  { color: #fff; }
+  .mt-8  { margin-top: 8px; }
+  .mt-12 { margin-top: 12px; }
+  .small { font-size: 11px; }
+  .smaller { font-size: 10px; }
+
+  @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; } }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .pulse { animation: pulse 2s infinite; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  @media (max-width: 900px) {
+    .market-grid { grid-template-columns: 1fr; }
+    .header-stats { display: none; }
+    .socios-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  }
+</style>
+</head>
+<body>
+<div id="notifs"></div>
+<div id="app">
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <span class="logo-icon">🌍</span>
+    <div>
+      <div class="logo-title">TERRA RUSH</div>
+      <div class="logo-sub">AI WORLD PREDICTION MARKET · BASE</div>
+    </div>
+  </div>
+  <div class="header-stats" id="header-stats">
+    <div class="stat-item">
+      <div class="stat-label">TOTAL FEES PAID</div>
+      <div class="stat-value" id="stat-fees">—</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-label">ROUND POOL</div>
+      <div class="stat-value" id="stat-pool">—</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-label">YOUR SOCIOS</div>
+      <div class="stat-value" id="stat-my-socios">0</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-label">PENDING</div>
+      <div class="stat-value" id="stat-pending">—</div>
+    </div>
+  </div>
+  <div class="wallet-section" id="wallet-section">
+    <button class="btn btn-primary" id="connect-btn" onclick="openWalletModal()">CONNECT WALLET</button>
+  </div>
+</header>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active" onclick="setTab('market')" id="tab-market">🎲 Market</div>
+  <div class="tab" onclick="setTab('socios')" id="tab-socios">🌍 Socios</div>
+  <div class="tab" onclick="setTab('leaderboard')" id="tab-leaderboard">🏆 Leaderboard</div>
+  <div class="tab" onclick="setTab('history')" id="tab-history">📜 History</div>
+</div>
+
+<main id="main-content">
+  <!-- Injected by JS -->
+</main>
+
+</div>
+
+<!-- MODALS (hidden by default) -->
+<div id="wallet-modal" class="modal-overlay" style="display:none" onclick="closeWalletModal(event)">
+  <div class="modal">
+    <div class="modal-title">Connect Wallet</div>
+    <div class="modal-subtitle">Connect to Base Mainnet to trade Socios and place predictions.</div>
+    <div class="wallet-list">
+      <div class="wallet-option" onclick="connectWallet('metamask')">
+        <span class="wallet-icon">🦊</span>
+        <div>
+          <div style="font-weight:700">MetaMask</div>
+          <div class="smaller muted">Browser extension</div>
+        </div>
+      </div>
+      <div class="wallet-option" onclick="connectWallet('coinbase')">
+        <span class="wallet-icon">🔵</span>
+        <div>
+          <div style="font-weight:700">Coinbase Wallet</div>
+          <div class="smaller muted">Mobile & extension</div>
+        </div>
+      </div>
+      <div class="wallet-option" onclick="connectWallet('walletconnect')">
+        <span class="wallet-icon">🔗</span>
+        <div>
+          <div style="font-weight:700">WalletConnect</div>
+          <div class="smaller muted">300+ wallets</div>
+        </div>
+      </div>
+      <div class="wallet-option" onclick="connectWallet('injected')">
+        <span class="wallet-icon">⚡</span>
+        <div>
+          <div style="font-weight:700">Browser Wallet</div>
+          <div class="smaller muted">Any injected provider</div>
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-outline btn-full mt-12" onclick="closeWalletModal()">Cancel</button>
+  </div>
+</div>
+
+<div id="socio-modal" class="modal-overlay" style="display:none" onclick="closeSocioModal(event)">
+  <div class="modal" id="socio-modal-content"></div>
+</div>
+
+<div id="buy-modal" class="modal-overlay" style="display:none" onclick="closeBuyModal(event)">
+  <div class="modal" id="buy-modal-content"></div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════════
+//  TERRA RUSH — COMPLETE FRONTEND
+//  Uses ethers.js v6 (loaded via CDN) for wallet + contract interaction
+//  Contract address: update CONTRACT_ADDRESS below after deployment
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── Config (UPDATE THESE AFTER DEPLOYMENT) ────────────────────────────────
+const CONTRACT_ADDRESS = "0x0000000000000000000000000000000000000000"; // <- your deployed address
+const BASE_CHAIN_ID = 8453n;
+const BASE_CHAIN_ID_HEX = "0x2105";
+
+// ── Country data ──────────────────────────────────────────────────────────
+const COUNTRIES = [
+  {code:"US",name:"United States",emoji:"🇺🇸",x:120,y:145,w:130,h:65},
+  {code:"CN",name:"China",emoji:"🇨🇳",x:580,y:125,w:145,h:80},
+  {code:"RU",name:"Russia",emoji:"🇷🇺",x:420,y:55,w:380,h:90},
+  {code:"BR",name:"Brazil",emoji:"🇧🇷",x:225,y:225,w:140,h:145},
+  {code:"AU",name:"Australia",emoji:"🇦🇺",x:618,y:305,w:165,h:110},
+  {code:"IN",name:"India",emoji:"🇮🇳",x:578,y:188,w:85,h:100},
+  {code:"CA",name:"Canada",emoji:"🇨🇦",x:80,y:55,w:190,h:85},
+  {code:"AR",name:"Argentina",emoji:"🇦🇷",x:222,y:340,w:65,h:120},
+  {code:"KZ",name:"Kazakhstan",emoji:"🇰🇿",x:490,y:115,w:100,h:55},
+  {code:"DZ",name:"Algeria",emoji:"🇩🇿",x:368,y:172,w:80,h:65},
+  {code:"CD",name:"DR Congo",emoji:"🇨🇩",x:415,y:268,w:80,h:72},
+  {code:"SA",name:"Saudi Arabia",emoji:"🇸🇦",x:488,y:208,w:80,h:60},
+  {code:"MX",name:"Mexico",emoji:"🇲🇽",x:108,y:192,w:100,h:50},
+  {code:"ID",name:"Indonesia",emoji:"🇮🇩",x:648,y:272,w:118,h:48},
+  {code:"SD",name:"Sudan",emoji:"🇸🇩",x:438,y:228,w:72,h:62},
+  {code:"LY",name:"Libya",emoji:"🇱🇾",x:388,y:182,w:62,h:58},
+  {code:"IR",name:"Iran",emoji:"🇮🇷",x:508,y:172,w:75,h:58},
+  {code:"MN",name:"Mongolia",emoji:"🇲🇳",x:588,y:100,w:100,h:50},
+  {code:"PE",name:"Peru",emoji:"🇵🇪",x:192,y:262,w:60,h:65},
+  {code:"TD",name:"Chad",emoji:"🇹🇩",x:418,y:232,w:48,h:60},
+  {code:"NE",name:"Niger",emoji:"🇳🇪",x:378,y:232,w:52,h:50},
+  {code:"AO",name:"Angola",emoji:"🇦🇴",x:398,y:308,w:50,h:60},
+  {code:"ML",name:"Mali",emoji:"🇲🇱",x:338,y:220,w:55,h:60},
+  {code:"ZA",name:"South Africa",emoji:"🇿🇦",x:408,y:362,w:68,h:55},
+  {code:"CO",name:"Colombia",emoji:"🇨🇴",x:188,y:238,w:58,h:52},
+  {code:"ET",name:"Ethiopia",emoji:"🇪🇹",x:478,y:248,w:58,h:52},
+  {code:"BO",name:"Bolivia",emoji:"🇧🇴",x:222,y:308,w:55,h:55},
+  {code:"MR",name:"Mauritania",emoji:"🇲🇷",x:312,y:208,w:55,h:55},
+  {code:"EG",name:"Egypt",emoji:"🇪🇬",x:448,y:192,w:52,h:48},
+  {code:"TZ",name:"Tanzania",emoji:"🇹🇿",x:458,y:292,w:55,h:58},
+  {code:"NG",name:"Nigeria",emoji:"🇳🇬",x:372,y:252,w:52,h:52},
+  {code:"VE",name:"Venezuela",emoji:"🇻🇪",x:208,y:222,w:58,h:40},
+  {code:"NA",name:"Mauritius",emoji:"🇳🇦",x:398,y:352,w:50,h:50},
+  {code:"PK",name:"Pakistan",emoji:"🇵🇰",x:542,y:172,w:55,h:55},
+  {code:"MZ",name:"Mozambique",emoji:"🇲🇿",x:452,y:328,w:48,h:62},
+  {code:"TR",name:"Turkey",emoji:"🇹🇷",x:452,y:152,w:68,h:38},
+  {code:"CL",name:"Chile",emoji:"🇨🇱",x:222,y:338,w:34,h:115},
+  {code:"ZM",name:"Zambia",emoji:"🇿🇲",x:428,y:308,w:52,h:52},
+  {code:"MM",name:"Myanmar",emoji:"🇲🇲",x:622,y:192,w:44,h:62},
+  {code:"AF",name:"Afghanistan",emoji:"🇦🇫",x:542,y:152,w:60,h:48},
+  {code:"SO",name:"Somalia",emoji:"🇸🇴",x:488,y:262,w:50,h:60},
+  {code:"CF",name:"Cent. African Rep.",emoji:"🇨🇫",x:428,y:252,w:58,h:52},
+  {code:"SS",name:"South Sudan",emoji:"🇸🇸",x:448,y:252,w:50,h:45},
+  {code:"UY",name:"Uruguay",emoji:"🇺🇾",x:252,y:352,w:40,h:38},
+  {code:"MG",name:"Madagascar",emoji:"🇲🇬",x:492,y:322,w:38,h:65},
+  {code:"KE",name:"Kenya",emoji:"🇰🇪",x:472,y:272,w:52,h:52},
+  {code:"YE",name:"Yemen",emoji:"🇾🇪",x:508,y:238,w:58,h:35},
+  {code:"TH",name:"Thailand",emoji:"🇹🇭",x:622,y:228,w:48,h:58},
+  {code:"SE",name:"Sweden",emoji:"🇸🇪",x:418,y:68,w:35,h:62},
+  {code:"UZ",name:"Uzbekistan",emoji:"🇺🇿",x:522,y:135,w:58,h:38},
+];
+
+const ABI = [
+  "function getCurrentRound() view returns (tuple(uint256 id,string countryCode,string metric,uint256 threshold,uint256 startTime,uint256 endTime,uint256 poolUnder,uint256 poolOver,uint8 status,bool result,uint256 aiCount,uint256 protocolFee))",
+  "function currentRoundId() view returns (uint256)",
+  "function getSocio(string) view returns (tuple(string countryCode,address owner,uint256 declaredPrice,uint256 lastTaxPaid,uint256 taxDeposit,bool initialized))",
+  "function getAllCountryCodes() view returns (string[])",
+  "function getSociosOwnedBy(address) view returns (string[])",
+  "function getUserBets(uint256,address) view returns (uint256,uint256)",
+  "function pendingWithdrawals(address) view returns (uint256)",
+  "function totalFeesEverDistributed() view returns (uint256)",
+  "function protocolFeesAccumulated() view returns (uint256)",
+  "function totalSocios() view returns (uint256)",
+  "function taxStatus(string) view returns (uint256,uint256,uint256)",
+  "function getRound(uint256) view returns (tuple(uint256 id,string countryCode,string metric,uint256 threshold,uint256 startTime,uint256 endTime,uint256 poolUnder,uint256 poolOver,uint8 status,bool result,uint256 aiCount,uint256 protocolFee))",
+  "function placeBet(bool) payable",
+  "function claimWinnings(uint256)",
+  "function withdraw()",
+  "function buySocio(string) payable",
+  "function declarePrice(string,uint256)",
+  "function depositTax(string) payable",
+  "function forfeitSocio(string)",
+  "event RoundResolved(uint256 indexed roundId,bool overWon,uint256 aiCount,uint256 protocolFee)",
+  "event BetPlaced(uint256 indexed roundId,address indexed bettor,bool isOver,uint256 amount)",
+  "event SocioBought(uint256 indexed countryCode,address indexed buyer,address indexed seller,uint256 price)",
+  "event RoundOpened(uint256 indexed roundId,string countryCode,string metric,uint256 threshold,uint256 endTime)",
+  "event FeesDistributed(uint256 amount,uint256 perSocio)",
+];
+
+// ── State ────────────────────────────────────────────────────────────────────
+let provider = null;
+let signer = null;
+let contract = null;
+let userAddress = null;
+let currentTab = 'market';
+let round = null;
+let socios = {};         // code -> socio object
+let userSocios = [];
+let pendingAmount = 0n;
+let totalFees = 0n;
+let selectedBetSide = null;
+let betAmount = "";
+let selectedSocio = null;
+let roundHistory = [];
+let timerInterval = null;
+let pollInterval = null;
+let isDemo = false;
+
+// ── Demo mode (no wallet) ─────────────────────────────────────────────────────
+const DEMO_SOCIOS = {};
+COUNTRIES.forEach((c, i) => {
+  const owners = ["0x1a2b3c4d...","0x5e6f7a8b...","0x9c0d1e2f...","0xYou","0x3a4b5c6d..."];
+  DEMO_SOCIOS[c.code] = {
+    countryCode: c.code,
+    owner: i % 7 === 3 ? "0xYou" : owners[i % 5],
+    declaredPrice: BigInt(Math.floor(Math.random() * 8 + 2)) * 10n**15n, // 0.002-0.01 ETH
+    lastTaxPaid: BigInt(Math.floor(Date.now()/1000) - 86400),
+    taxDeposit: BigInt(Math.floor(Math.random() * 5 + 1)) * 10n**15n,
+    initialized: true,
+  };
+});
+
+let demoRound = {
+  id: 7n, countryCode: "US",
+  metric: "Vehicles at Times Square traffic camera",
+  threshold: 42n,
+  startTime: BigInt(Math.floor(Date.now()/1000) - 60),
+  endTime: BigInt(Math.floor(Date.now()/1000) + 120),
+  poolUnder: 84200000000000000n,
+  poolOver: 53100000000000000n,
+  status: 0, result: false, aiCount: 0n, protocolFee: 0n,
+};
+
+// ── Notification system ───────────────────────────────────────────────────────
+function notify(msg, type = "info") {
+  const el = document.createElement("div");
+  el.className = `notif notif-${type}`;
+  el.textContent = msg;
+  document.getElementById("notifs").appendChild(el);
+  setTimeout(() => el.remove(), 4500);
+}
+
+// ── Wallet connection ─────────────────────────────────────────────────────────
+function openWalletModal() { document.getElementById("wallet-modal").style.display = "flex"; }
+function closeWalletModal(e) {
+  if (!e || e.target === document.getElementById("wallet-modal"))
+    document.getElementById("wallet-modal").style.display = "none";
+}
+
+async function connectWallet(type) {
+  closeWalletModal();
+  try {
+    let ethProvider;
+    if (type === 'metamask' || type === 'injected') {
+      if (!window.ethereum) { notify("No browser wallet found. Install MetaMask.", "error"); return; }
+      ethProvider = window.ethereum;
+    } else if (type === 'coinbase') {
+      if (window.ethereum?.isCoinbaseWallet) { ethProvider = window.ethereum; }
+      else { notify("Coinbase Wallet not detected. Try browser wallet.", "error"); return; }
+    } else if (type === 'walletconnect') {
+      // WalletConnect requires @web3modal/wagmi — for CDN version, prompt QR
+      notify("WalletConnect: open your wallet app and scan the QR code.", "info");
+      // Fallback to injected
+      if (!window.ethereum) { notify("No wallet detected.", "error"); return; }
+      ethProvider = window.ethereum;
+    }
+
+    provider = new ethers.BrowserProvider(ethProvider);
+    await provider.send("eth_requestAccounts", []);
+    signer = await provider.getSigner();
+    userAddress = await signer.getAddress();
+
+    // Switch to Base
+    try {
+      await ethProvider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: BASE_CHAIN_ID_HEX }] });
+    } catch (switchErr) {
+      if (switchErr.code === 4902) {
+        await ethProvider.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: BASE_CHAIN_ID_HEX,
+            chainName: "Base",
+            rpcUrls: ["https://mainnet.base.org"],
+            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+            blockExplorerUrls: ["https://basescan.org"],
+          }]
+        });
+      }
+    }
+
+    const isDeployed = CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000";
+    if (isDeployed) {
+      contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+      isDemo = false;
+    } else {
+      isDemo = true;
+      notify("Demo mode: contract not yet deployed. All data is simulated.", "info");
+    }
+
+    updateWalletUI();
+    notify(`Connected: ${shortAddr(userAddress)}`, "success");
+    await refreshAll();
+    startPolling();
+
+  } catch (err) {
+    console.error(err);
+    notify(err.message?.slice(0, 80) || "Connection failed", "error");
+  }
+}
+
+function shortAddr(addr) {
+  if (!addr) return "—";
+  return addr.slice(0, 6) + "..." + addr.slice(-4);
+}
+
+function updateWalletUI() {
+  const ws = document.getElementById("wallet-section");
+  if (userAddress) {
+    ws.innerHTML = `
+      <div class="wallet-addr" onclick="copyAddr()">${shortAddr(userAddress)}</div>
+      <button class="btn btn-outline btn-sm" onclick="disconnectWallet()">Disconnect</button>
+    `;
+  } else {
+    ws.innerHTML = `<button class="btn btn-primary" onclick="openWalletModal()">CONNECT WALLET</button>`;
+  }
+}
+
+function copyAddr() {
+  navigator.clipboard?.writeText(userAddress);
+  notify("Address copied!", "info");
+}
+
+function disconnectWallet() {
+  provider = signer = contract = userAddress = null;
+  isDemo = false;
+  updateWalletUI();
+  clearInterval(pollInterval);
+  render();
+}
+
+// ── Data refresh ──────────────────────────────────────────────────────────────
+async function refreshAll() {
+  await Promise.all([refreshRound(), refreshSocios(), refreshUserData()]);
+  render();
+}
+
+async function refreshRound() {
+  try {
+    if (isDemo) { round = demoRound; return; }
+    if (!contract) return;
+    round = await contract.getCurrentRound();
+  } catch (e) { console.error("refreshRound:", e.message); }
+}
+
+async function refreshSocios() {
+  try {
+    if (isDemo) { socios = DEMO_SOCIOS; return; }
+    if (!contract) return;
+    const codes = await contract.getAllCountryCodes();
+    await Promise.all(codes.map(async (code) => {
+      const s = await contract.getSocio(code);
+      socios[code] = s;
+    }));
+  } catch (e) { console.error("refreshSocios:", e.message); }
+}
+
+async function refreshUserData() {
+  try {
+    if (!userAddress) return;
+    if (isDemo) {
+      userSocios = COUNTRIES.filter(c => DEMO_SOCIOS[c.code]?.owner === "0xYou").map(c => c.code);
+      pendingAmount = 42000000000000000n; // 0.042 ETH demo
+      totalFees = 1280000000000000000n;
+      return;
+    }
+    if (!contract) return;
+    [userSocios, pendingAmount, totalFees] = await Promise.all([
+      contract.getSociosOwnedBy(userAddress),
+      contract.pendingWithdrawals(userAddress),
+      contract.totalFeesEverDistributed(),
+    ]);
+  } catch (e) { console.error("refreshUserData:", e.message); }
+}
+
+function startPolling() {
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(refreshAll, 15000);
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render() {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.getElementById(`tab-${currentTab}`)?.classList.add("active");
+
+  updateHeaderStats();
+
+  const main = document.getElementById("main-content");
+  switch (currentTab) {
+    case "market": main.innerHTML = renderMarket(); break;
+    case "socios": main.innerHTML = renderSocios(); break;
+    case "leaderboard": main.innerHTML = renderLeaderboard(); break;
+    case "history": main.innerHTML = renderHistory(); break;
+  }
+
+  if (currentTab === "market") {
+    startTimer();
+    bindBetUI();
+  }
+
+  renderWithdrawBanner();
+}
+
+function setTab(tab) {
+  currentTab = tab;
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  render();
+}
+
+function updateHeaderStats() {
+  const roundPool = round
+    ? formatEth((round.poolUnder || 0n) + (round.poolOver || 0n))
+    : "—";
+  const el = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  el("stat-fees", totalFees ? formatEth(totalFees) + " ETH" : "—");
+  el("stat-pool", round ? roundPool + " ETH" : "—");
+  el("stat-my-socios", userSocios.length);
+  el("stat-pending", pendingAmount > 0n ? formatEth(pendingAmount) + " ETH" : "—");
+}
+
+// ── Market page ───────────────────────────────────────────────────────────────
+function renderMarket() {
+  if (!round) return `
+    <div class="market-grid">
+      <div>
+        <div class="card" style="margin-top:20px">
+          <div class="card-label">STATUS</div>
+          <div class="card-title">No active round</div>
+          <p class="muted small mt-12">Connect wallet to load live round data from Base.</p>
+          ${!userAddress ? `<button class="btn btn-primary mt-12" onclick="openWalletModal()">Connect Wallet</button>` : ""}
+        </div>
+        ${renderMap()}
+      </div>
+      <div class="right-panel">${renderOracleCard()}</div>
+    </div>`;
+
+  const isOpen = Number(round.status) === 0;
+  const isResolved = Number(round.status) === 2;
+  const totalPool = (round.poolUnder || 0n) + (round.poolOver || 0n);
+  const underPct = totalPool > 0n ? Number(round.poolUnder * 100n / totalPool) : 50;
+  const overPct = 100 - underPct;
+  const odds_under = totalPool > 0n && round.poolUnder > 0n
+    ? (Number(totalPool * 95n / 100n) / Number(round.poolUnder)).toFixed(2) : "—";
+  const odds_over = totalPool > 0n && round.poolOver > 0n
+    ? (Number(totalPool * 95n / 100n) / Number(round.poolOver)).toFixed(2) : "—";
+
+  const timerClass = isResolved ? "timer-resolved" : "";
+
+  const cc = COUNTRIES.find(c => c.code === round.countryCode);
+
+  return `
+  <div class="market-grid">
+    <div>
+      <!-- Round card -->
+      <div class="card" style="margin-top:20px">
+        <div class="round-header">
+          <div>
+            <div class="card-label">ROUND #${round.id} · ${cc?.emoji || ""} ${round.countryCode}</div>
+            <div class="card-title">${round.metric}</div>
+            <div class="small muted" style="margin-top:6px">
+              Threshold: <span class="yellow">${round.threshold} units</span>
+              &nbsp;·&nbsp;
+              ${isResolved
+                ? `AI counted <strong class="white">${round.aiCount}</strong> → <strong class="${round.result ? 'orange' : 'blue'}">${round.result ? '⬆ OVER' : '⬇ UNDER'} WINS</strong>`
+                : `Oracle: YOLOv8 · Resolves at end of timer`}
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div class="smaller muted">${isOpen ? "TIME LEFT" : "STATUS"}</div>
+            <div class="round-timer ${timerClass}" id="round-timer" style="color:${isResolved ? '#aaaaff' : '#00ffaa'}">
+              ${isResolved ? (round.result ? "⬆ OVER" : "⬇ UNDER") : "0:00"}
+            </div>
+          </div>
+        </div>
+        <div class="pool-bars">
+          <div class="pool-labels">
+            <span class="blue">⬇ UNDER — ${underPct}% — ${formatEth(round.poolUnder)} ETH</span>
+            <span class="orange">⬆ OVER — ${overPct}% — ${formatEth(round.poolOver)} ETH</span>
+          </div>
+          <div class="pool-bar">
+            <div class="pool-under" style="width:${underPct}%"></div>
+            <div class="pool-over"></div>
+          </div>
+          <div class="pool-meta">
+            <span>Total pool: <strong class="white">${formatEth(totalPool)} ETH</strong></span>
+            <span>Pari-mutuel · 5% protocol fee · No house edge</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- World map -->
+      ${renderMap()}
+    </div>
+
+    <!-- Right panel -->
+    <div class="right-panel">
+
+      <!-- Bet panel -->
+      <div class="card">
+        <div class="card-label">PLACE BET</div>
+        <div class="bet-sides">
+          <div class="bet-side bet-side-under ${selectedBetSide === false ? 'selected' : ''}"
+            onclick="selectSide(false)">
+            ⬇ UNDER
+            <div class="bet-side-sub">${underPct}% · ${odds_under}x</div>
+          </div>
+          <div class="bet-side bet-side-over ${selectedBetSide === true ? 'selected' : ''}"
+            onclick="selectSide(true)">
+            ⬆ OVER
+            <div class="bet-side-sub">${overPct}% · ${odds_over}x</div>
+          </div>
+        </div>
+        <input class="bet-input" id="bet-amount-input" type="number"
+          placeholder="Amount (ETH)" step="0.001" min="0.001"
+          value="${betAmount}" onchange="betAmount=this.value;updatePayoutPreview()" oninput="betAmount=this.value;updatePayoutPreview()"/>
+        <button class="btn btn-primary btn-full" id="bet-btn"
+          onclick="placeBet()"
+          ${!isOpen || !userAddress ? 'disabled' : ''}>
+          ${!userAddress ? 'CONNECT TO BET' : !isOpen ? 'ROUND CLOSED' : 'PLACE BET'}
+        </button>
+        <div id="payout-preview" style="display:none" class="payout-preview">
+          <div class="smaller muted">Estimated payout</div>
+          <div class="payout-amount" id="payout-amount">—</div>
+          <div class="payout-note">After 5% protocol fee · Changes as pool grows</div>
+        </div>
+      </div>
+
+      <!-- Claim panel (if resolved & user has bet) -->
+      <div id="claim-panel" style="display:none"></div>
+
+      <!-- Socio detail (selected) -->
+      <div id="selected-socio-panel"></div>
+
+      <!-- Oracle info -->
+      ${renderOracleCard()}
+
+      <!-- Withdraw banner inline -->
+      ${pendingAmount > 0n ? `
+      <div class="card" style="border-color:rgba(255,204,0,0.3);background:rgba(255,204,0,0.04)">
+        <div class="flex-between">
+          <div>
+            <div class="card-label">CLAIMABLE</div>
+            <div style="font-size:22px;color:var(--warn);font-weight:700">${formatEth(pendingAmount)} ETH</div>
+            <div class="smaller muted">Winnings + fee distributions</div>
+          </div>
+          <button class="btn btn-warn" onclick="doWithdraw()">WITHDRAW</button>
+        </div>
+      </div>` : ""}
+
+    </div>
+  </div>`;
+}
+
+function renderMap() {
+  const activeCode = round?.countryCode;
+
+  const paths = COUNTRIES.map(c => {
+    const s = socios[c.code];
+    const isOwned = s && userAddress && s.owner?.toLowerCase() === userAddress?.toLowerCase();
+    const isDemoOwned = isDemo && DEMO_SOCIOS[c.code]?.owner === "0xYou";
+    const mine = isOwned || isDemoOwned;
+    const isActive = c.code === activeCode;
+    let fill, stroke, sw;
+
+    if (isActive)      { fill = "rgba(255,204,0,0.28)"; stroke = "#ffcc00"; sw = 2; }
+    else if (mine)     { fill = "rgba(0,255,170,0.22)"; stroke = "#00ffaa"; sw = 1.5; }
+    else               { fill = "rgba(80,80,200,0.13)"; stroke = "rgba(80,80,220,0.4)"; sw = 1; }
+
+    return `<rect class="country-path" x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}" rx="4"
+      fill="${fill}" stroke="${stroke}" stroke-width="${sw}"
+      data-code="${c.code}" onclick="selectCountry('${c.code}')"
+      title="${c.emoji} ${c.name}">
+      <title>${c.emoji} ${c.name}</title>
+    </rect>
+    <text x="${c.x + c.w/2}" y="${c.y + c.h/2 + 4}" text-anchor="middle"
+      fill="rgba(220,220,255,0.7)" font-size="9" font-family="Space Mono" pointer-events="none">${c.code}</text>`;
+  }).join("");
+
+  return `
+  <div class="map-wrap">
+    <div class="map-label">WORLD SOCIOS MAP — CLICK COUNTRY TO VIEW & BUY</div>
+    <svg class="world" viewBox="0 60 900 420" xmlns="http://www.w3.org/2000/svg">
+      <rect width="900" height="480" fill="#070718"/>
+      ${[...Array(9)].map((_,i)=>`<line x1="${i*100}" y1="0" x2="${i*100}" y2="480" stroke="rgba(80,80,220,0.05)" stroke-width="1"/>`).join("")}
+      ${[...Array(5)].map((_,i)=>`<line x1="0" y1="${i*100}" x2="900" y2="${i*100}" stroke="rgba(80,80,220,0.05)" stroke-width="1"/>`).join("")}
+      ${paths}
+    </svg>
+    <div class="map-legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#00ffaa"></div>Your Socios</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ffcc00"></div>Active round</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgba(80,80,200,0.3)"></div>Available</div>
+    </div>
+  </div>`;
+}
+
+function renderOracleCard() {
+  return `
+  <div class="card oracle-card">
+    <div class="card-label" style="color:var(--accent2)">🤖 AI ORACLE</div>
+    <div class="oracle-row"><span class="muted">Model</span><span>YOLOv8-nano</span></div>
+    <div class="oracle-row"><span class="muted">Source</span><span>Live traffic cameras</span></div>
+    <div class="oracle-row"><span class="muted">Update</span><span>Every 3 minutes</span></div>
+    <div class="oracle-row"><span class="muted">Accuracy</span><span class="green">94.2%</span></div>
+    <div class="oracle-row"><span class="muted">Chain</span><span>Base Mainnet</span></div>
+    <div class="oracle-row"><span class="muted">Model</span><span>Pari-mutuel</span></div>
+    <div class="oracle-row"><span class="muted">House edge</span><span class="green">None</span></div>
+  </div>`;
+}
+
+// ── Socios page ───────────────────────────────────────────────────────────────
+function renderSocios() {
+  const activeCode = round?.countryCode;
+  const cards = COUNTRIES.map(c => {
+    const s = socios[c.code] || DEMO_SOCIOS[c.code];
+    if (!s) return `<div class="socio-card"><div class="card-label">${c.code}</div></div>`;
+    const mine = (userAddress && s.owner?.toLowerCase() === userAddress?.toLowerCase()) ||
+                 (isDemo && s.owner === "0xYou");
+    const isActive = c.code === activeCode;
+    return `
+    <div class="socio-card ${mine ? 'owned' : ''} ${isActive ? 'active-round' : ''}"
+      onclick="openSocioModal('${c.code}')">
+      <div class="flex-between">
+        <span style="font-family:var(--font-sans);font-weight:700;font-size:14px">${c.emoji} ${c.name}</span>
+        <span class="smaller" style="color:var(--muted)">${c.code}</span>
+      </div>
+      <div class="smaller mt-8 ${mine ? 'green' : 'muted'}">
+        ${mine ? '✓ YOU OWN THIS' : shortAddr(s.owner)}
+      </div>
+      ${isActive ? `<div class="smaller yellow mt-8">🎯 Active round</div>` : ""}
+      <div class="flex-between mt-8">
+        <span class="small yellow">${formatEth(s.declaredPrice)} ETH</span>
+        <span class="smaller muted">${(1/COUNTRIES.length*100).toFixed(2)}% fees</span>
+      </div>
+      <button class="btn ${mine ? 'btn-outline' : 'btn-primary'} btn-sm btn-full mt-8"
+        onclick="event.stopPropagation();openSocioModal('${c.code}')">
+        ${mine ? 'MANAGE' : `BUY ${formatEth(s.declaredPrice)} ETH`}
+      </button>
+    </div>`;
+  }).join("");
+
+  return `
+  <div style="margin-bottom:20px;padding-top:20px">
+    <div style="font-family:var(--font-sans);font-size:20px;font-weight:700;color:#fff">World Socios</div>
+    <div class="small muted" style="margin-top:4px">
+      ${COUNTRIES.length} country tiles · Harberger tax (2%/yr) · Instant buyout · Earn protocol fees
+    </div>
+  </div>
+  <div class="socios-grid">${cards}</div>`;
+}
+
+// ── Leaderboard ───────────────────────────────────────────────────────────────
+function renderLeaderboard() {
+  const ownerMap = {};
+  COUNTRIES.forEach(c => {
+    const s = socios[c.code] || DEMO_SOCIOS[c.code];
+    if (!s) return;
+    const owner = s.owner;
+    if (!ownerMap[owner]) ownerMap[owner] = { tiles: 0, value: 0n };
+    ownerMap[owner].tiles++;
+    ownerMap[owner].value += s.declaredPrice || 0n;
+  });
+
+  const sorted = Object.entries(ownerMap).sort((a,b) => b[1].tiles - a[1].tiles);
+  const rankColors = ["#ffcc00","#aaaaaa","#aa6633"];
+
+  const rows = sorted.map(([owner, data], i) => {
+    const me = (userAddress && owner?.toLowerCase() === userAddress?.toLowerCase()) ||
+               (isDemo && owner === "0xYou");
+    const rankBg = i < 3 ? rankColors[i] : "rgba(80,80,220,0.2)";
+    const rankColor = i < 3 ? "#000" : "var(--muted)";
+    return `
+    <div class="lb-row ${me ? 'me' : ''}">
+      <div class="lb-rank" style="background:${rankBg};color:${rankColor}">${i+1}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;color:${me ? 'var(--accent2)' : '#fff'}">${me ? '👤 You' : shortAddr(owner)}</div>
+        <div class="smaller muted mt-8">${data.tiles} countries · ${formatEth(data.value)} ETH declared</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:18px;color:var(--under);font-weight:700">${data.tiles}</div>
+        <div class="smaller muted">TILES</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:14px;color:var(--accent2)">${(data.tiles/COUNTRIES.length*100).toFixed(1)}%</div>
+        <div class="smaller muted">FEES</div>
+      </div>
+    </div>`;
+  }).join("");
+
+  return `
+  <div style="padding-top:20px">
+    <div style="font-family:var(--font-sans);font-size:20px;font-weight:700;color:#fff;margin-bottom:16px">Socio Leaderboard</div>
+    ${rows}
+  </div>`;
+}
+
+// ── History ────────────────────────────────────────────────────────────────────
+function renderHistory() {
+  if (roundHistory.length === 0) {
+    return `<div style="padding-top:30px;text-align:center;color:var(--muted)">
+      No resolved rounds yet. History appears here after rounds complete.
+    </div>`;
+  }
+  const rows = roundHistory.map(r => `
+  <div class="card" style="margin-top:12px">
+    <div class="flex-between">
+      <div>
+        <div class="card-label">ROUND #${r.id} · ${r.countryCode}</div>
+        <div style="font-size:14px">${r.metric}</div>
+        <div class="smaller muted mt-8">Threshold: ${r.threshold} · AI counted: <strong class="white">${r.aiCount}</strong></div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:20px;color:${r.result ? 'var(--over)' : 'var(--under)'};font-weight:700">
+          ${r.result ? '⬆ OVER' : '⬇ UNDER'}
+        </div>
+        <div class="smaller muted">Pool: ${formatEth(r.poolUnder + r.poolOver)} ETH</div>
+      </div>
+    </div>
+  </div>`).join("");
+
+  return `<div style="padding-top:20px">
+    <div style="font-family:var(--font-sans);font-size:20px;font-weight:700;color:#fff;margin-bottom:4px">Round History</div>
+    ${rows}
+  </div>`;
+}
+
+// ── Timer ─────────────────────────────────────────────────────────────────────
+function startTimer() {
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    const el = document.getElementById("round-timer");
+    if (!el || !round) return;
+    if (Number(round.status) !== 0) return;
+    const now = Math.floor(Date.now() / 1000);
+    const left = Math.max(0, Number(round.endTime) - now);
+    const m = Math.floor(left / 60);
+    const s = left % 60;
+    el.textContent = `${m}:${s.toString().padStart(2, "0")}`;
+    el.style.color = left < 30 ? "#ff4444" : "#00ffaa";
+    if (left === 0) clearInterval(timerInterval);
+  }, 1000);
+}
+
+// ── Bet logic ─────────────────────────────────────────────────────────────────
+function bindBetUI() {}
+
+function selectSide(isOver) {
+  selectedBetSide = isOver;
+  updatePayoutPreview();
+  render();
+}
+
+function updatePayoutPreview() {
+  const el = document.getElementById("payout-preview");
+  const amtEl = document.getElementById("payout-amount");
+  if (!el || !amtEl) return;
+  const amt = parseFloat(betAmount);
+  if (selectedBetSide === null || !amt || !round) { el.style.display = "none"; return; }
+  const totalPool = Number(round.poolUnder + round.poolOver) / 1e18;
+  const myPool = selectedBetSide ? Number(round.poolOver) / 1e18 : Number(round.poolUnder) / 1e18;
+  if (myPool === 0) { el.style.display = "none"; return; }
+  const payout = amt * ((totalPool * 0.95) / myPool);
+  el.style.display = "block";
+  amtEl.textContent = payout.toFixed(4) + " ETH";
+}
+
+async function placeBet() {
+  if (selectedBetSide === null) { notify("Select UNDER or OVER", "error"); return; }
+  const amt = parseFloat(betAmount);
+  if (!amt || amt < 0.001) { notify("Min bet is 0.001 ETH", "error"); return; }
+  if (!userAddress) { openWalletModal(); return; }
+
+  if (isDemo) {
+    const side = selectedBetSide ? "poolOver" : "poolUnder";
+    const amtWei = BigInt(Math.floor(amt * 1e18));
+    demoRound[side] += amtWei;
+    round = demoRound;
+    notify(`Demo bet: ${amt} ETH on ${selectedBetSide ? 'OVER' : 'UNDER'}`, "success");
+    betAmount = "";
+    selectedBetSide = null;
+    render();
+    return;
+  }
+
+  try {
+    const tx = await contract.placeBet(selectedBetSide, {
+      value: ethers.parseEther(amt.toString()),
+    });
+    notify("Bet submitted, waiting for confirmation...", "info");
+    await tx.wait();
+    notify(`Bet confirmed! ${amt} ETH on ${selectedBetSide ? 'OVER' : 'UNDER'}`, "success");
+    betAmount = "";
+    selectedBetSide = null;
+    await refreshAll();
+  } catch (err) {
+    notify(err.reason || err.message?.slice(0,80) || "Bet failed", "error");
+  }
+}
+
+async function doWithdraw() {
+  if (isDemo) { notify("Demo: 0.042 ETH withdrawn!", "success"); pendingAmount = 0n; render(); return; }
+  if (!contract) return;
+  try {
+    const tx = await contract.withdraw();
+    notify("Withdrawal submitted...", "info");
+    await tx.wait();
+    notify("Withdrawn successfully!", "success");
+    pendingAmount = 0n;
+    await refreshUserData();
+    render();
+  } catch (err) {
+    notify(err.reason || err.message?.slice(0,60) || "Withdraw failed", "error");
+  }
+}
+
+// ── Country selection (map click) ─────────────────────────────────────────────
+function selectCountry(code) {
+  const c = COUNTRIES.find(x => x.code === code);
+  const s = socios[code] || DEMO_SOCIOS[code];
+  if (!c || !s) return;
+  selectedSocio = code;
+
+  const panel = document.getElementById("selected-socio-panel");
+  if (!panel) { openSocioModal(code); return; }
+
+  const mine = (userAddress && s.owner?.toLowerCase() === userAddress?.toLowerCase()) ||
+               (isDemo && s.owner === "0xYou");
+
+  panel.innerHTML = `
+  <div class="card" style="border-color:rgba(80,80,220,0.4)">
+    <div class="card-label">SOCIO — ${c.emoji} ${c.name}</div>
+    <div class="socio-grid">
+      <div class="socio-field">
+        <div class="socio-field-label">OWNER</div>
+        <div class="socio-field-value ${mine ? 'green' : ''}">${mine ? 'You' : shortAddr(s.owner)}</div>
+      </div>
+      <div class="socio-field">
+        <div class="socio-field-label">PRICE</div>
+        <div class="socio-field-value yellow">${formatEth(s.declaredPrice)} ETH</div>
+      </div>
+      <div class="socio-field">
+        <div class="socio-field-label">TAX/DAY</div>
+        <div class="socio-field-value orange">${formatEth(s.declaredPrice * 2n / (365n * 100n))} ETH</div>
+      </div>
+      <div class="socio-field">
+        <div class="socio-field-label">FEE SHARE</div>
+        <div class="socio-field-value blue">${(1/COUNTRIES.length*100).toFixed(2)}%</div>
+      </div>
+    </div>
+    ${mine
+      ? `<button class="btn btn-outline btn-full" onclick="openSocioModal('${code}')">MANAGE TILE</button>`
+      : `<button class="btn btn-success btn-full" onclick="openBuyModal('${code}')">BUY FOR ${formatEth(s.declaredPrice)} ETH</button>`}
+  </div>`;
+}
+
+// ── Socio modal ───────────────────────────────────────────────────────────────
+function openSocioModal(code) {
+  const c = COUNTRIES.find(x => x.code === code);
+  const s = socios[code] || DEMO_SOCIOS[code];
+  if (!c || !s) return;
+
+  const mine = (userAddress && s.owner?.toLowerCase() === userAddress?.toLowerCase()) ||
+               (isDemo && s.owner === "0xYou");
+
+  const taxPct = s.taxDeposit > 0n
+    ? Math.min(100, Number((s.declaredPrice * 2n / (365n * 100n)) * 100n / (s.taxDeposit > 0n ? s.taxDeposit : 1n)))
+    : 0;
+
+  document.getElementById("socio-modal-content").innerHTML = `
+    <div class="modal-title">${c.emoji} ${c.name}</div>
+    <div class="modal-subtitle">Country tile · Harberger-taxed · 2%/yr · Earns ${(1/COUNTRIES.length*100).toFixed(2)}% of all protocol fees</div>
+
+    <div class="socio-grid">
+      <div class="socio-field">
+        <div class="socio-field-label">OWNER</div>
+        <div class="socio-field-value ${mine ? 'green' : 'white'}">${mine ? '✓ You' : shortAddr(s.owner)}</div>
+      </div>
+      <div class="socio-field">
+        <div class="socio-field-label">DECLARED PRICE</div>
+        <div class="socio-field-value yellow">${formatEth(s.declaredPrice)} ETH</div>
+      </div>
+      <div class="socio-field">
+        <div class="socio-field-label">TAX DEPOSIT</div>
+        <div class="socio-field-value">${formatEth(s.taxDeposit)} ETH</div>
+      </div>
+      <div class="socio-field">
+        <div class="socio-field-label">DAILY TAX</div>
+        <div class="socio-field-value orange">${formatEthFull(s.declaredPrice * 2n / 36500n)} ETH</div>
+      </div>
+    </div>
+
+    <div class="small muted" style="margin-bottom:6px">Tax deposit runway</div>
+    <div class="tax-bar">
+      <div class="tax-fill" style="width:${Math.min(100, taxPct)}%"></div>
+    </div>
+
+    ${mine ? `
+    <div class="divider"></div>
+    <div class="card-label">SET YOUR PRICE</div>
+    <input class="modal-input" id="new-price-input" type="number" step="0.001"
+      placeholder="New price (ETH)" value="${formatEth(s.declaredPrice)}"/>
+    <div class="small muted" style="margin-bottom:10px" id="tax-preview">
+      Tax/day: ${formatEthFull(s.declaredPrice * 2n / 36500n)} ETH
+    </div>
+
+    <div class="card-label" style="margin-top:10px">TOP UP TAX DEPOSIT</div>
+    <input class="modal-input" id="tax-deposit-input" type="number" step="0.01" placeholder="Deposit amount (ETH)"/>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeSocioModal()" style="flex:1">CANCEL</button>
+      <button class="btn btn-primary" onclick="doSetPrice('${code}')" style="flex:2">SET PRICE</button>
+      <button class="btn btn-warn" onclick="doDepositTax('${code}')" style="flex:1">DEPOSIT</button>
+    </div>
+    ` : `
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeSocioModal()" style="flex:1">CLOSE</button>
+      <button class="btn btn-success" onclick="closeSocioModal();openBuyModal('${code}')" style="flex:2">
+        BUY FOR ${formatEth(s.declaredPrice)} ETH
+      </button>
+    </div>
+    `}
+  `;
+
+  if (mine) {
+    document.getElementById("new-price-input")?.addEventListener("input", (e) => {
+      const p = parseFloat(e.target.value) || 0;
+      const daily = p * 0.02 / 365;
+      const el = document.getElementById("tax-preview");
+      if (el) el.textContent = `Tax/day: ${daily.toFixed(6)} ETH · Tax/year: ${(p * 0.02).toFixed(4)} ETH`;
+    });
+  }
+
+  document.getElementById("socio-modal").style.display = "flex";
+}
+
+function closeSocioModal(e) {
+  if (!e || e.target === document.getElementById("socio-modal"))
+    document.getElementById("socio-modal").style.display = "none";
+}
+
+async function doSetPrice(code) {
+  const val = document.getElementById("new-price-input")?.value;
+  if (!val || parseFloat(val) <= 0) { notify("Enter a valid price", "error"); return; }
+  closeSocioModal();
+
+  if (isDemo) {
+    DEMO_SOCIOS[code].declaredPrice = BigInt(Math.floor(parseFloat(val) * 1e18));
+    notify(`Demo: price set to ${val} ETH`, "success");
+    render(); return;
+  }
+  try {
+    const tx = await contract.declarePrice(code, ethers.parseEther(val));
+    notify("Setting price...", "info");
+    await tx.wait();
+    notify(`Price set to ${val} ETH for ${code}`, "success");
+    await refreshSocios();
+    render();
+  } catch (err) { notify(err.reason || err.message?.slice(0,80) || "Failed", "error"); }
+}
+
+async function doDepositTax(code) {
+  const val = document.getElementById("tax-deposit-input")?.value;
+  if (!val || parseFloat(val) <= 0) { notify("Enter deposit amount", "error"); return; }
+  closeSocioModal();
+
+  if (isDemo) {
+    DEMO_SOCIOS[code].taxDeposit += BigInt(Math.floor(parseFloat(val) * 1e18));
+    notify(`Demo: deposited ${val} ETH tax buffer`, "success");
+    render(); return;
+  }
+  try {
+    const tx = await contract.depositTax(code, { value: ethers.parseEther(val) });
+    notify("Depositing tax buffer...", "info");
+    await tx.wait();
+    notify(`Tax deposit added for ${code}`, "success");
+    await refreshSocios();
+    render();
+  } catch (err) { notify(err.reason || err.message?.slice(0,80) || "Failed", "error"); }
+}
+
+// ── Buy modal ─────────────────────────────────────────────────────────────────
+function openBuyModal(code) {
+  const c = COUNTRIES.find(x => x.code === code);
+  const s = socios[code] || DEMO_SOCIOS[code];
+  if (!c || !s) return;
+
+  document.getElementById("buy-modal-content").innerHTML = `
+    <div class="modal-title">Acquire Socio</div>
+    <div class="modal-subtitle">
+      ${c.emoji} <strong>${c.name}</strong><br/>
+      Instant buyout at declared price. You become the owner immediately and start earning
+      <strong>${(1/COUNTRIES.length*100).toFixed(2)}%</strong> of all protocol fees.
+    </div>
+
+    <div class="socio-grid">
+      <div class="socio-field">
+        <div class="socio-field-label">BUY PRICE</div>
+        <div class="socio-field-value yellow">${formatEth(s.declaredPrice)} ETH</div>
+      </div>
+      <div class="socio-field">
+        <div class="socio-field-label">CURRENT OWNER</div>
+        <div class="socio-field-value">${shortAddr(s.owner)}</div>
+      </div>
+      <div class="socio-field">
+        <div class="socio-field-label">FEE SHARE</div>
+        <div class="socio-field-value blue">${(1/COUNTRIES.length*100).toFixed(2)}%</div>
+      </div>
+      <div class="socio-field">
+        <div class="socio-field-label">DAILY TAX (2%)</div>
+        <div class="socio-field-value orange">${formatEthFull(s.declaredPrice * 2n / 36500n)} ETH</div>
+      </div>
+    </div>
+
+    <div class="card-label" style="margin-top:10px">INITIAL TAX DEPOSIT (optional but recommended)</div>
+    <input class="modal-input" id="buy-tax-deposit" type="number" step="0.01"
+      placeholder="Tax buffer (ETH)" value="${formatEth(s.declaredPrice * 2n / 100n)}"/>
+    <div class="small muted">Covers ~${Math.round(Number(s.declaredPrice * 2n / 36500n) > 0 ? 365 : 30)} days of tax at current price</div>
+
+    <div class="modal-actions" style="margin-top:18px">
+      <button class="btn btn-outline" onclick="closeBuyModal()" style="flex:1">CANCEL</button>
+      <button class="btn btn-success" onclick="doeBuySocio('${code}')" style="flex:2">
+        BUY FOR ${formatEth(s.declaredPrice)} ETH
+      </button>
+    </div>
+  `;
+
+  document.getElementById("buy-modal").style.display = "flex";
+}
+
+function closeBuyModal(e) {
+  if (!e || e.target === document.getElementById("buy-modal"))
+    document.getElementById("buy-modal").style.display = "none";
+}
+
+async function doeBuySocio(code) {
+  const s = socios[code] || DEMO_SOCIOS[code];
+  if (!s) return;
+  closeBuyModal();
+
+  if (!userAddress) { openWalletModal(); return; }
+
+  const taxDepositInput = parseFloat(document.getElementById("buy-tax-deposit")?.value || "0");
+
+  if (isDemo) {
+    DEMO_SOCIOS[code].owner = "0xYou";
+    userSocios = COUNTRIES.filter(c => DEMO_SOCIOS[c.code]?.owner === "0xYou").map(c => c.code);
+    notify(`Demo: You acquired ${COUNTRIES.find(c=>c.code===code)?.name}! 🎉`, "success");
+    render(); return;
+  }
+
+  try {
+    const price = s.declaredPrice;
+    const taxEth = taxDepositInput > 0 ? ethers.parseEther(taxDepositInput.toString()) : 0n;
+    const total = price + taxEth;
+
+    const tx = await contract.buySocio(code, { value: total });
+    notify("Purchase submitted...", "info");
+    await tx.wait();
+    notify(`You acquired ${code}! 🎉`, "success");
+    await refreshAll();
+  } catch (err) {
+    notify(err.reason || err.message?.slice(0,80) || "Purchase failed", "error");
+  }
+}
+
+// ── Withdraw banner ────────────────────────────────────────────────────────────
+function renderWithdrawBanner() {}
+
+// ── Formatting ────────────────────────────────────────────────────────────────
+function formatEth(wei) {
+  if (wei === undefined || wei === null) return "—";
+  const n = Number(wei) / 1e18;
+  return n.toFixed(4).replace(/\.?0+$/, "") || "0";
+}
+
+function formatEthFull(wei) {
+  if (!wei) return "0";
+  return (Number(wei) / 1e18).toFixed(6);
+}
+
+// ── Event listeners from contract ────────────────────────────────────────────
+function setupContractEvents() {
+  if (!contract) return;
+  contract.on("RoundResolved", (roundId, overWon, aiCount, protocolFee) => {
+    notify(`Round #${roundId} resolved: ${aiCount} counted → ${overWon ? "OVER" : "UNDER"} wins!`, "success");
+    if (round) {
+      roundHistory.unshift({ ...round, aiCount, result: overWon, id: Number(roundId) });
+      roundHistory = roundHistory.slice(0, 20);
+    }
+    setTimeout(refreshAll, 2000);
+  });
+
+  contract.on("RoundOpened", (roundId, countryCode, metric, threshold, endTime) => {
+    notify(`New round #${roundId} opened: ${metric}`, "info");
+    setTimeout(refreshAll, 1000);
+  });
+
+  contract.on("SocioBought", (countryCode, buyer, seller, price) => {
+    const c = COUNTRIES.find(x => x.code === countryCode);
+    notify(`${c?.emoji || countryCode} ${c?.name || countryCode} acquired for ${formatEth(price)} ETH!`, "info");
+    refreshSocios().then(render);
+  });
+
+  contract.on("FeesDistributed", (amount, perSocio) => {
+    if (userSocios.length > 0) {
+      const myShare = Number(perSocio * BigInt(userSocios.length)) / 1e18;
+      notify(`Fees distributed! Your share: ${myShare.toFixed(5)} ETH`, "success");
+    }
+    refreshUserData().then(render);
+  });
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  // Load demo data immediately
+  socios = DEMO_SOCIOS;
+  round = demoRound;
+  isDemo = true;
+  render();
+
+  // Auto-connect if already authorized
+  if (window.ethereum?.selectedAddress) {
+    await connectWallet("injected");
+  }
+}
+
+init();
+</script>
+</body>
+</html>
